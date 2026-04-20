@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SkyFury - 飞机大战</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700;900&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- Score Display -->
+        <div id="scoreBoard" class="hidden">
+            Score: <span id="scoreEl">0</span>
+        </div>
+
+        <!-- Start Screen -->
+        <div id="startScreen" class="ui-panel">
+            <h1 class="glow-text">SKYFURY</h1>
+            <p>拖动以移动战机，它将自动射击</p>
+            
+            <div class="ship-selector">
+                <h3>选择你的战机</h3>
+                <div class="ship-options">
+                    <div class="ship-option" data-ship="speedster">
+                        <div class="ship-icon speedster-icon"></div>
+                        <span>闪电侠</span>
+                    </div>
+                    <div class="ship-option active" data-ship="balanced">
+                        <div class="ship-icon balanced-icon"></div>
+                        <span>平衡者</span>
+                    </div>
+                    <div class="ship-option" data-ship="juggernaut">
+                        <div class="ship-icon juggernaut-icon"></div>
+                        <span>重装兵</span>
+                    </div>
+                </div>
+            </div>
+
+            <button id="startBtn" class="neon-btn">START GAME</button>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="gameOverScreen" class="ui-panel hidden">
+            <h1 class="glow-text error-text">GAME OVER</h1>
+            <p class="final-score-text">Final Score: <span id="finalScoreEl">0</span></p>
+            <button id="restartBtn" class="neon-btn">PLAY AGAIN</button>
+        </div>
+    </div>
+    
+    <script src="game.js"></script>
+</body>
+</html>
