@@ -36,6 +36,10 @@
                         <div class="ship-icon juggernaut-icon"></div>
                         <span>重装兵</span>
                     </div>
+                    <div class="ship-option" data-ship="phantom">
+                        <div class="ship-icon phantom-icon"></div>
+                        <span>幻影</span>
+                    </div>
                 </div>
             </div>
 
@@ -46,6 +50,14 @@
         <div id="gameOverScreen" class="ui-panel hidden">
             <h1 class="glow-text error-text">GAME OVER</h1>
             <p class="final-score-text">Final Score: <span id="finalScoreEl">0</span></p>
+            
+            <div class="leaderboard">
+                <h3>🏆 高分排行榜 🏆</h3>
+                <ul id="leaderboardList">
+                    <!-- Leaderboard items will be injected here -->
+                </ul>
+            </div>
+
             <button id="restartBtn" class="neon-btn">PLAY AGAIN</button>
         </div>
     </div>

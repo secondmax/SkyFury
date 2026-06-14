@@ -22,6 +22,28 @@ imgBalanced.src = 'balanced.png';
 const imgJuggernaut = new Image();
 imgJuggernaut.src = 'juggernaut.png';
 
+const imgPhantom = new Image();
+imgPhantom.src = 'phantom.png';
+
+// Preload Enemy Images
+const imgEnemyScout = new Image();
+imgEnemyScout.src = 'enemy_scout.png';
+
+const imgEnemyFighter = new Image();
+imgEnemyFighter.src = 'enemy_fighter.png';
+
+const imgEnemyElite = new Image();
+imgEnemyElite.src = 'enemy_elite.jpeg';
+
+const imgEnemyTank = new Image();
+imgEnemyTank.src = 'enemy_tank.png';
+
+const imgEnemyBoss = new Image();
+imgEnemyBoss.src = 'enemy_boss.png';
+
+const imgEnemyFortress = new Image();
+imgEnemyFortress.src = 'enemy_fortress.png';
+
 shipOptions.forEach(option => {
     option.addEventListener('click', () => {
         shipOptions.forEach(opt => opt.classList.remove('active'));
@@ -43,8 +65,9 @@ let animationId;
 let score = 0;
 let frameCount = 0;
 let isGameOver = false;
-let nextFortressScore = 300;
+let nextFortressScore = 800;
 let fortressActive = false;
+let fortressesDefeated = 0;
 
 let player;
 let bullets = [];
@@ -130,6 +153,10 @@ class Player {
             this.radius = 25;
             this.color = '#ffff00';
             this.speed = 0.1;
+        } else if (type === 'phantom') {
+            this.radius = 12; // Smallest hitbox
+            this.color = '#ff00ff'; // Magenta/Purple
+            this.speed = 0.5; // Fastest speed
         } else { // balanced
             this.radius = 20;
             this.color = '#00ffaa';
@@ -162,6 +189,7 @@ class Player {
         let img = imgBalanced;
         if (this.type === 'speedster') img = imgSpeedster;
         else if (this.type === 'juggernaut') img = imgJuggernaut;
+        else if (this.type === 'phantom') img = imgPhantom;
 
         if (img.complete && img.naturalWidth !== 0) {
             const size = this.radius * 3.5; // adjust scaling so it looks right
@@ -191,33 +219,85 @@ class Player {
 }
 
 class Bullet {
-    constructor(x, y, radius, color, velocity, isLaser = false) {
+    constructor(x, y, radius, color, velocity, isLaser = false, isExplosive = false, isHoming = false) {
         this.x = x;
         this.y = y;
         this.radius = radius;
         this.color = color;
         this.velocity = velocity;
         this.isLaser = isLaser;
+        this.isExplosive = isExplosive;
+        this.isHoming = isHoming;
+        this.exploded = false;
+        this.maxExplosionRadius = 80;
+        this.target = null;
     }
 
     update() {
+        if (this.exploded) {
+            this.radius += 5; // Expand rapidly
+            return;
+        }
+        if (this.isHoming) {
+            if (!this.target || this.target.hp <= 0 || !enemies.includes(this.target)) {
+                let closestDist = Infinity;
+                let closestEnemy = null;
+                for (let e of enemies) {
+                    if (e.y > 0) {
+                        const d = Math.hypot(e.x - this.x, e.y - this.y);
+                        if (d < closestDist) {
+                            closestDist = d;
+                            closestEnemy = e;
+                        }
+                    }
+                }
+                this.target = closestEnemy;
+            }
+            if (this.target) {
+                const angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                const speed = 12;
+                this.velocity.x += (Math.cos(angle) * speed - this.velocity.x) * 0.15;
+                this.velocity.y += (Math.sin(angle) * speed - this.velocity.y) * 0.15;
+            }
+            particles.push(new Particle(this.x, this.y, 2, this.color, {x: (Math.random()-0.5)*2, y: 2}));
+        }
         this.x += this.velocity.x;
         this.y += this.velocity.y;
     }
 
     draw() {
         ctx.save();
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = this.color;
         ctx.beginPath();
-        if (this.isLaser) {
+        if (this.exploded) {
+            ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 200, 0, ${1 - this.radius / this.maxExplosionRadius})`;
+            ctx.fill();
+        } else if (this.isLaser) {
             ctx.rect(this.x - this.radius, this.y - this.radius * 4, this.radius * 2, this.radius * 8);
+            ctx.fillStyle = this.color;
+            ctx.fill();
         } else {
             // Elongated bullet
             ctx.ellipse(this.x, this.y, this.radius * 0.5, this.radius * 2, 0, 0, Math.PI * 2);
+            if (this.isExplosive) {
+                ctx.fillStyle = '#ffffff'; // White center for explosive bullet
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            } else if (this.isHoming) {
+                ctx.fillStyle = '#ffffff'; // White center
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            } else {
+                ctx.fillStyle = this.color;
+                ctx.fill();
+            }
         }
-        ctx.fillStyle = this.color;
-        ctx.fill();
         ctx.restore();
     }
 }
@@ -252,8 +332,6 @@ class EnemyBullet {
             ctx.fillStyle = `rgba(255, 50, 0, ${1 - this.explosionRadius / this.maxExplosionRadius})`;
             ctx.fill();
         } else {
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = this.color;
             ctx.beginPath();
             ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
             ctx.fillStyle = this.color;
@@ -278,8 +356,8 @@ class Enemy {
             this.hp = 500 + Math.floor(score / 10) * 10;
             this.rotationSpeed = 0;
             this.sides = 4;
-            this.width = canvas.width * 0.8;
-            this.height = 80;
+            this.width = canvas.width * 0.7; // Reduced width
+            this.height = 300; 
             this.radius = this.width / 2; // approximation for simple distance checks
         } else if (type === 'boss') {
             this.hp = 50; // Set HP to 50 as requested
@@ -293,6 +371,10 @@ class Enemy {
             this.hp = 15 + Math.floor(score / 500); // gets tougher
             this.rotationSpeed = (Math.random() - 0.5) * 0.05; // slower spin
             this.sides = 8;
+        } else if (type === 'elite') {
+            this.hp = 8 + Math.floor(score / 800); // medium health
+            this.rotationSpeed = (Math.random() - 0.5) * 0.08;
+            this.sides = 6;
         } else { // fighter
             this.hp = 3 + Math.floor(score / 1000);
             this.rotationSpeed = (Math.random() - 0.5) * 0.1;
@@ -306,7 +388,9 @@ class Enemy {
 
     update() {
         if (this.type === 'fortress') {
-            if (this.y < 100) {
+            const visibleHeight = 180; // How much of the fortress is on screen
+            const targetY = visibleHeight - this.height / 2;
+            if (this.y < targetY) {
                 this.y += this.velocity.y; // enter slowly
             }
             this.x += this.velocity.x;
@@ -316,10 +400,10 @@ class Enemy {
         } else {
             this.x += this.velocity.x;
             this.y += this.velocity.y;
-            this.rotation += this.rotationSpeed;
         }
         
-        if (this.y > 0 && this.y < canvas.height) { // Only shoot if on screen
+        const halfHeight = (this.height ? this.height / 2 : this.radius);
+        if (this.y + halfHeight > 0 && this.y - halfHeight < canvas.height) { // Only shoot if on screen
             this.shootTimer--;
             if (this.shootTimer <= 0) {
                 if (this.type === 'fortress') {
@@ -337,6 +421,11 @@ class Enemy {
                     // One explosive shot every 120 frames
                     enemyBullets.push(new EnemyBullet(this.x, this.y + this.radius, 8, '#ff0000', { x: 0, y: 3 }, true));
                     this.shootTimer = 120;
+                } else if (this.type === 'elite') {
+                    // V-shape spread every 60 frames
+                    enemyBullets.push(new EnemyBullet(this.x, this.y + this.radius, 5, '#00ffff', { x: -2, y: 4 }));
+                    enemyBullets.push(new EnemyBullet(this.x, this.y + this.radius, 5, '#00ffff', { x: 2, y: 4 }));
+                    this.shootTimer = 60;
                 } else if (this.type === 'boss') {
                     // Ring of bullets every 90 frames
                     for (let i = 0; i < 16; i++) {
@@ -357,67 +446,91 @@ class Enemy {
 
     draw() {
         ctx.save();
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = this.color;
         ctx.translate(this.x, this.y);
-        ctx.rotate(this.rotation);
         
+        let img = null;
+        let drawWidth = this.radius * 2.5;
+        let drawHeight = this.radius * 2.5;
+
         if (this.type === 'fortress') {
-            // Draw Fortress
-            ctx.beginPath();
-            ctx.rect(-this.width/2, -this.height/2, this.width, this.height);
-            ctx.fillStyle = 'rgba(20, 0, 0, 0.9)';
-            ctx.fill();
-            ctx.lineWidth = 3;
-            ctx.strokeStyle = this.color;
-            ctx.stroke();
-
-            // Draw turrets
-            ctx.fillStyle = this.color;
-            [-0.3, 0, 0.3].forEach(offset => {
-                ctx.beginPath();
-                ctx.arc(this.width * offset, this.height/2, 15, 0, Math.PI, true);
-                ctx.fill();
-            });
-
-            // HP Bar
-            const hpRatio = this.hp / this.maxHp;
-            ctx.fillStyle = '#ff0000';
-            ctx.fillRect(-this.width/2 + 10, -this.height/2 + 10, (this.width - 20) * hpRatio, 10);
+            img = imgEnemyFortress;
+            drawWidth = this.width;
+            if (img.complete && img.naturalWidth !== 0) {
+                const aspectRatio = img.naturalHeight / img.naturalWidth;
+                drawHeight = drawWidth * aspectRatio;
+                // Sync collision height with visual height if possible
+                this.height = drawHeight;
+            } else {
+                drawHeight = this.height;
+            }
+        } else if (this.type === 'boss') {
+            img = imgEnemyBoss;
+            drawWidth = this.radius * 3.5;
+            drawHeight = this.radius * 3.5;
+        } else if (this.type === 'tank') {
+            img = imgEnemyTank;
+            drawWidth = this.radius * 3;
+            drawHeight = this.radius * 3;
+        } else if (this.type === 'elite') {
+            img = imgEnemyElite;
+        } else if (this.type === 'scout') {
+            img = imgEnemyScout;
         } else {
-            // If it's a scout, point it downwards (assuming velocity is downwards)
-            if (this.type === 'scout') {
-                // angle towards velocity
-                const angle = Math.atan2(this.velocity.y, this.velocity.x);
-                ctx.rotate(angle - Math.PI / 2); // default points up, rotate to velocity
-            }
-            
-            ctx.beginPath();
-            for (let i = 0; i < this.sides; i++) {
-                const angle = (i * 2 * Math.PI) / this.sides;
-                // for scout make it pointy
-                let r = this.radius;
-                if (this.type === 'scout' && i === 0) r *= 1.5; 
-                ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
-            }
-            ctx.closePath();
-            
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
-            ctx.fill();
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = this.color;
-            ctx.stroke();
+            img = imgEnemyFighter;
+        }
 
-            // Draw inner core showing HP for tanks or fighters
-            if (this.type === 'tank' || this.type === 'boss' || this.hp > 1) {
+        if (img && img.complete && img.naturalWidth !== 0) {
+            ctx.rotate(Math.PI); // Keep them pointing down fixed
+            ctx.drawImage(img, -drawWidth/2, -drawHeight/2, drawWidth, drawHeight);
+        } else {
+            // Fallback to geometric shapes
+            // Remove ctx.rotate(this.rotation);
+            if (this.type === 'fortress') {
                 ctx.beginPath();
-                const hpRatio = this.hp / this.maxHp;
-                ctx.arc(0, 0, this.radius * 0.5 * hpRatio, 0, Math.PI * 2);
-                ctx.fillStyle = this.color;
-                ctx.globalAlpha = 0.5;
+                ctx.rect(-this.width/2, -this.height/2, this.width, this.height);
+                ctx.fillStyle = 'rgba(20, 0, 0, 0.9)';
                 ctx.fill();
-                ctx.globalAlpha = 1;
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = this.color;
+                ctx.stroke();
+            } else {
+                ctx.beginPath();
+                for (let i = 0; i < this.sides; i++) {
+                    const angle = (i * 2 * Math.PI) / this.sides;
+                    let r = this.radius;
+                    if (this.type === 'scout' && i === 0) r *= 1.5; 
+                    ctx.lineTo(Math.cos(angle) * r, Math.sin(angle) * r);
+                }
+                ctx.closePath();
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                ctx.fill();
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = this.color;
+                ctx.stroke();
             }
+        }
+
+        // HP Bar for fortress or large enemies
+        if (this.type === 'fortress' || this.type === 'boss' || (this.type === 'tank' && this.hp < this.maxHp)) {
+            const barWidth = this.type === 'fortress' ? this.width * 0.8 : this.radius * 2;
+            const barHeight = this.type === 'fortress' ? 10 : 4;
+            const hpRatio = this.hp / this.maxHp;
+            ctx.setTransform(1, 0, 0, 1, this.x, this.y); // Reset transform for HP bar
+            
+            let barY = -drawHeight/2 - 20; // Default above
+            if (this.type === 'fortress') {
+                // For fortress, show bar at a fixed visible height
+                const visibleHeight = 180;
+                barY = (visibleHeight - 20) - this.y; 
+            } else if (this.y < 100) {
+                // If enemy is too close to top, show bar below it
+                barY = drawHeight/2 + 10;
+            }
+
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(-barWidth/2, barY, barWidth, barHeight);
+            ctx.fillStyle = hpRatio > 0.3 ? '#00ff00' : '#ff0000';
+            ctx.fillRect(-barWidth/2, barY, barWidth * hpRatio, barHeight);
         }
         
         ctx.restore();
@@ -446,8 +559,6 @@ class Particle {
     draw() {
         ctx.save();
         ctx.globalAlpha = this.alpha;
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = this.color;
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = this.color;
@@ -472,8 +583,6 @@ class PowerUp {
 
     draw() {
         ctx.save();
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = this.color;
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(0,0,0,0.8)';
@@ -499,42 +608,36 @@ function spawnEnemy() {
     
     const speedMultiplier = 1 + score / 2000;
 
-    if (r < 0.03) {
+    if (fortressesDefeated >= 3 && r < 0.03) {
         // 3% chance Boss
         type = 'boss';
-        radius = Math.random() * 20 + 80; // 80 to 100, much larger than tank
-        color = '#ff0000'; // Pure red
-        velocity = {
-            x: (Math.random() - 0.5) * 0.5,
-            y: (Math.random() * 0.5 + 0.2) * speedMultiplier // Very slow
-        };
-    } else if (r < 0.2) {
-        // 17% chance Tank
+        radius = Math.random() * 20 + 80;
+        color = '#ff0000';
+        velocity = { x: (Math.random() - 0.5) * 0.5, y: (Math.random() * 0.5 + 0.2) * speedMultiplier };
+    } else if (fortressesDefeated >= 2 && r < 0.15) {
+        // Tank
         type = 'tank';
-        radius = Math.random() * 10 + 35; // 35 to 45
-        color = '#ff0055'; // Reddish
-        velocity = {
-            x: (Math.random() - 0.5) * 1,
-            y: (Math.random() * 1 + 0.5) * speedMultiplier
-        };
-    } else if (r < 0.5) {
-        // 30% chance Scout
+        radius = Math.random() * 10 + 35;
+        color = '#ff0055';
+        velocity = { x: (Math.random() - 0.5) * 1, y: (Math.random() * 1 + 0.5) * speedMultiplier };
+    } else if (fortressesDefeated >= 1 && r < 0.3) {
+        // Elite
+        type = 'elite';
+        radius = Math.random() * 5 + 25;
+        color = '#00ffff'; // Cyan
+        velocity = { x: (Math.random() - 0.5) * 2, y: (Math.random() * 1.5 + 1.5) * speedMultiplier };
+    } else if (r < 0.55) {
+        // Scout
         type = 'scout';
-        radius = Math.random() * 5 + 10; // 10 to 15
-        color = '#ffff00'; // Yellow
-        velocity = {
-            x: (Math.random() - 0.5) * 3,
-            y: (Math.random() * 3 + 4) * speedMultiplier
-        };
+        radius = Math.random() * 5 + 10;
+        color = '#ffff00';
+        velocity = { x: (Math.random() - 0.5) * 3, y: (Math.random() * 3 + 4) * speedMultiplier };
     } else {
-        // 50% chance Fighter
+        // Fighter
         type = 'fighter';
-        radius = Math.random() * 10 + 20; // 20 to 30
+        radius = Math.random() * 10 + 15;
         color = ['#ff00ff', '#ffaa00'][Math.floor(Math.random() * 2)];
-        velocity = {
-            x: (Math.random() - 0.5) * 2,
-            y: (Math.random() * 2 + 2) * speedMultiplier
-        };
+        velocity = { x: (Math.random() - 0.5) * 2, y: (Math.random() * 2 + 2) * speedMultiplier };
     }
 
     const x = Math.random() * (canvas.width - radius * 2) + radius;
@@ -586,10 +689,13 @@ function animate() {
             for(let i = -2; i <= 2; i++) {
                 bullets.push(new Bullet(bx + i*5, by, 4, COLOR_BULLET, { x: i * 3, y: -15 }));
             }
+            if (Math.random() < 0.2) { // 20% chance for a homing missile
+                bullets.push(new Bullet(bx, by, 8, '#ff0055', { x: (Math.random()-0.5)*10, y: -5 }, false, false, true));
+            }
         } else if (player.weaponType === 'threeway') {
-            bullets.push(new Bullet(bx, by, 4, COLOR_BULLET, { x: 0, y: -15 }));
-            bullets.push(new Bullet(bx - 10, by + 5, 4, COLOR_BULLET, { x: -3, y: -15 }));
-            bullets.push(new Bullet(bx + 10, by + 5, 4, COLOR_BULLET, { x: 3, y: -15 }));
+            bullets.push(new Bullet(bx, by, 6, '#ffff00', { x: 0, y: -15 }, false, true)); // explosive middle bullet
+            bullets.push(new Bullet(bx - 15, by + 5, 4, COLOR_BULLET, { x: -3, y: -15 }));
+            bullets.push(new Bullet(bx + 15, by + 5, 4, COLOR_BULLET, { x: 3, y: -15 }));
         } else { // normal
             bullets.push(new Bullet(bx, by, 4, COLOR_BULLET, { x: 0, y: -15 }));
             if (score > 1000) {
@@ -603,8 +709,6 @@ function animate() {
     if (player.weaponType === 'laser') {
         const laserWidth = 16;
         ctx.save();
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = '#ff0000';
         ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
         ctx.fillRect(player.x - laserWidth / 2, 0, laserWidth, player.y - player.radius);
         ctx.fillStyle = '#ffffff';
@@ -649,9 +753,15 @@ function animate() {
         b.update();
         b.draw();
         
-        // Remove if off screen
-        if (b.y + b.radius < 0 || b.x < 0 || b.x > canvas.width) {
-            bullets.splice(i, 1);
+        if (b.exploded) {
+            if (b.radius >= b.maxExplosionRadius) {
+                bullets.splice(i, 1);
+            }
+        } else {
+            // Remove if off screen
+            if (b.y + b.radius < 0 || b.x < 0 || b.x > canvas.width) {
+                bullets.splice(i, 1);
+            }
         }
     }
 
@@ -731,16 +841,26 @@ function animate() {
             
             if (hitEnemy) {
                 // Hit!
-                createExplosion(bullet.x, bullet.y, COLOR_BULLET, 5); // small spark
-                if (!bullet.isLaser) {
+                if (bullet.isExplosive && !bullet.exploded) {
+                    bullet.exploded = true;
+                    bullet.velocity = {x: 0, y: 0};
+                    bullet.color = '#ffaa00';
+                    createExplosion(bullet.x, bullet.y, '#ffffff', 20); // big spark
+                } else if (!bullet.isLaser && !bullet.exploded) {
                     bullets.splice(j, 1);
+                    createExplosion(bullet.x, bullet.y, bullet.color, 10); // spark
                 }
                 
-                enemy.hp--;
+                if (bullet.isHoming) {
+                    enemy.hp -= 100; // Insta-kill damage
+                } else {
+                    enemy.hp--;
+                }
                 
                 if (enemy.hp <= 0) {
                     if (enemy.type === 'fortress') {
                         fortressActive = false;
+                        fortressesDefeated++;
                         score += 500;
                         // multiple powerups
                         for(let k=0; k<5; k++) {
@@ -792,6 +912,7 @@ function animate() {
                 if (enemy.hp <= 0) {
                     if (enemy.type === 'fortress') {
                         fortressActive = false;
+                        fortressesDefeated++;
                         score += 500;
                         for(let k=0; k<5; k++) {
                             const types = ['threeway', 'shotgun', 'laser'];
@@ -833,11 +954,11 @@ function animate() {
     // Spawn Fortress Boss
     if (score >= nextFortressScore && !fortressActive) {
         fortressActive = true;
-        nextFortressScore += 500;
+        nextFortressScore += 1000 + (fortressesDefeated * 200); // Progressively harder to trigger boss
         
         // create the fortress
-        const fWidth = canvas.width * 0.8;
-        enemies.push(new Enemy(canvas.width/2, -100, fWidth/2, '#ff0000', {x: 1, y: 0.5}, 'fortress'));
+        const fWidth = canvas.width * 0.7;
+        enemies.push(new Enemy(canvas.width/2, -200, fWidth/2, '#ff0000', {x: 1, y: 0.5}, 'fortress'));
     }
 
     // Spawn Enemy (slower if fortress is active)
@@ -863,8 +984,9 @@ function initGame() {
     particles = [];
     powerUps = [];
     isGameOver = false;
-    nextFortressScore = 300;
+    nextFortressScore = 800;
     fortressActive = false;
+    fortressesDefeated = 0;
     
     // Set initial mouse pos to center bottom
     mouse.x = canvas.width / 2;
@@ -891,10 +1013,35 @@ function endGame() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     particles.forEach(p => { p.update(); p.draw(); });
     
+    // Handle Leaderboard
+    let highScores = JSON.parse(localStorage.getItem('skyfury_leaderboard') || '[]');
+    const currentScoreObj = { score: score, date: new Date().toLocaleDateString() };
+    highScores.push(currentScoreObj);
+    highScores.sort((a, b) => b.score - a.score);
+    highScores = highScores.slice(0, 5); // Keep top 5
+    localStorage.setItem('skyfury_leaderboard', JSON.stringify(highScores));
+    
     setTimeout(() => {
         scoreBoard.classList.add('hidden');
         gameOverScreen.classList.remove('hidden');
         finalScoreEl.innerHTML = score;
+        
+        // Update Leaderboard UI
+        const leaderboardList = document.getElementById('leaderboardList');
+        if (leaderboardList) {
+            leaderboardList.innerHTML = '';
+            let isCurrentScoreHighlighted = false;
+            highScores.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.innerHTML = `<span>#${index + 1}</span> <span>${item.score} pts</span>`;
+                // Highlight the current score exactly once if it's in the top 5
+                if (!isCurrentScoreHighlighted && item.score === score && item.date === currentScoreObj.date) {
+                    li.classList.add('new-score');
+                    isCurrentScoreHighlighted = true;
+                }
+                leaderboardList.appendChild(li);
+            });
+        }
     }, 1000);
 }
 
